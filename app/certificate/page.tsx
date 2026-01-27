@@ -171,7 +171,7 @@ useEffect(() => {
 
     try {
       const canvas = await html2canvas(downloadRef.current, {
-        scale: 3,
+        scale: 2,
         width: A4_WIDTH,
         height: A4_HEIGHT,
         windowWidth: A4_WIDTH,
@@ -230,6 +230,9 @@ useEffect(() => {
                 onChange={handleChange}
                 className="w-full rounded-lg border px-4 py-2"
               />
+               {errors['weddingDate'] && (
+                  <p className="text-xs text-red-500 mt-1">Required</p>
+                )}
             </div>
 
             <div className="md:col-span-2">
@@ -243,6 +246,9 @@ useEffect(() => {
                 onChange={handleChange}
                 className="w-full rounded-lg border px-4 py-2"
               />
+               {errors["address"] && (
+                  <p className="text-xs text-red-500 mt-1">Required</p>
+                )}
             </div>
 
             <button
