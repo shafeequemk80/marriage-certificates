@@ -106,16 +106,14 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
 
 /* ================= MAIN PAGE ================= */
 export default function MarriageCertificatePage() {
-     const isloggedIn=   sessionStorage.getItem("loggedIn");
-
   const router = useRouter();
-      useEffect(() => {
+useEffect(() => {
+  const isLoggedIn = sessionStorage.getItem("loggedIn");
+  if (isLoggedIn !== "true") {
+    router.replace("/login");
+  }
+}, [router]);
 
-   if (isloggedIn !== "true") {
-     router.push("/login");
-   }
-
-  },[isloggedIn]); 
   const downloadRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState<FormData>({
