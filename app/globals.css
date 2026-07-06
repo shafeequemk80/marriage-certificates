@@ -9,8 +9,8 @@
   font-display: swap;
 }
 @font-face {
-  font-family: "CustomTimesRomanbold";
-  src: url("/fonts/times.ttf") format("truetype");
+  font-family: "CustomTimesRoman";
+  src: url("/fonts/timesbd.ttf") format("truetype");
   font-weight: bold;
   font-style: normal;
   font-display: swap;

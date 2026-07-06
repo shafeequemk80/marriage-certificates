@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import html2canvas from "html2canvas";
+import { useEffect, useState, useCallback } from "react";
 import jsPDF from "jspdf";
 import { useRouter } from "next/navigation";
 
@@ -9,15 +8,17 @@ import { useRouter } from "next/navigation";
 type FormData = {
   groomName: string;
   groomFatherName: string;
+  groomAddress: string;
   bridalName: string;
   bridalFatherName: string;
+  bridalAddress: string;
   weddingDate: string;
   weddingPlace: string;
-  address: string;
+  solemnizerName: string;
 };
 
 /* ================= CONSTANTS ================= */
-const PDF_FONT = '  '
+const PDF_FONT = 'CustomTimesRoman'
 const A4_WIDTH = 794;
 const A4_HEIGHT = 1123;
 
@@ -27,15 +28,160 @@ const FORM_FIELDS = [
   ["bridalName", "Bride Name"],
   ["bridalFatherName", "Bride Father Name"],
   ["weddingPlace", "Wedding Place"],
+  ["solemnizerName", "Solemnizer Name (Who Nikkahed)"],
 ] as const;
 
 /* ================= HELPERS ================= */
-const formatDate = (date: string) =>
-  new Date(date).toLocaleDateString("en-GB", {
+const formatDate = (date: string) => {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return date;
+  return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "long",
     year: "numeric",
   });
+};
+
+/* Helper to draw text with mixed bold/normal formatting, word wrapping, and justification */
+const drawParagraph = (
+  doc: any,
+  text: string,
+  startX: number,
+  startY: number,
+  maxWidth: number,
+  lineHeight: number,
+  fontSize: number,
+  fontName: string,
+  align: "left" | "justify" = "left",
+  indent: number = 0
+) => {
+  doc.setFontSize(fontSize);
+
+  // We keep a running bold state across words
+  let isBold = false;
+
+  interface StyledSegment {
+    text: string;
+    bold: boolean;
+    width: number;
+  }
+
+  interface Word {
+    segments: StyledSegment[];
+    width: number; // total width of this word's segments
+  }
+
+  const wordsRaw = text.split(" ");
+  const allWords: Word[] = [];
+
+  for (const wordRaw of wordsRaw) {
+    if (wordRaw === "") {
+      continue;
+    }
+
+    const segments: StyledSegment[] = [];
+    const parts = wordRaw.split(/(\*\*)/g);
+    let wordWidth = 0;
+
+    for (const part of parts) {
+      if (part === "**") {
+        isBold = !isBold;
+        continue;
+      }
+      if (!part) continue;
+
+      doc.setFont(fontName, isBold ? "bold" : "normal");
+      const w = doc.getTextWidth(part);
+      segments.push({
+        text: part,
+        bold: isBold,
+        width: w,
+      });
+      wordWidth += w;
+    }
+
+    allWords.push({
+      segments,
+      width: wordWidth,
+    });
+  }
+
+  interface Line {
+    words: Word[];
+    width: number; // total width including normal space width between words
+  }
+
+  const lines: Line[] = [];
+  let currentLineWords: Word[] = [];
+  let currentLineWidth = 0;
+  let isFirstLine = true;
+
+  // Measure space width in normal style
+  doc.setFont(fontName, "normal");
+  const spaceWidth = doc.getTextWidth(" ");
+
+  for (const word of allWords) {
+    const spaceOffset = isFirstLine ? indent : 0;
+    const wordWidthOnLine = currentLineWords.length === 0 ? word.width : spaceWidth + word.width;
+
+    if (currentLineWidth + wordWidthOnLine > maxWidth - spaceOffset) {
+      lines.push({ words: currentLineWords, width: currentLineWidth });
+      currentLineWords = [word];
+      currentLineWidth = word.width;
+      isFirstLine = false;
+    } else {
+      currentLineWords.push(word);
+      currentLineWidth += wordWidthOnLine;
+    }
+  }
+  if (currentLineWords.length > 0) {
+    lines.push({ words: currentLineWords, width: currentLineWidth });
+  }
+
+  let currentY = startY;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    const isLastLine = lineIndex === lines.length - 1;
+    const lineIndent = lineIndex === 0 ? indent : 0;
+    let currentX = startX + lineIndent;
+
+    if (align === "justify" && !isLastLine && line.words.length > 1) {
+      // Calculate precise spacing to fill maxWidth
+      const totalWordsWidth = line.words.reduce((sum, w) => sum + w.width, 0);
+      const totalSpaceWidth = maxWidth - lineIndent - totalWordsWidth;
+      const justifySpaceWidth = totalSpaceWidth / (line.words.length - 1);
+
+      for (let i = 0; i < line.words.length; i++) {
+        const word = line.words[i];
+        for (const seg of word.segments) {
+          doc.setFont(fontName, seg.bold ? "bold" : "normal");
+          doc.text(seg.text, currentX, currentY);
+          currentX += seg.width;
+        }
+        if (i < line.words.length - 1) {
+          currentX += justifySpaceWidth;
+        }
+      }
+    } else {
+      // Left aligned
+      for (let i = 0; i < line.words.length; i++) {
+        const word = line.words[i];
+        for (const seg of word.segments) {
+          doc.setFont(fontName, seg.bold ? "bold" : "normal");
+          doc.text(seg.text, currentX, currentY);
+          currentX += seg.width;
+        }
+        if (i < line.words.length - 1) {
+          currentX += spaceWidth;
+        }
+      }
+    }
+    currentY += lineHeight;
+  }
+
+  return currentY;
+};
 
 /* ================= CERTIFICATE ================= */
 type CertificateProps = {
@@ -49,11 +195,11 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
     style={{
       width: A4_WIDTH,
       height: A4_HEIGHT,
-      backgroundImage: "url('/template.png')",
+      backgroundImage: "url('/template.webp')",
       backgroundSize: `${A4_WIDTH}px ${A4_HEIGHT}px`,
       backgroundRepeat: "no-repeat",
       position: "relative",
-    fontFamily: PDF_FONT,
+      fontFamily: PDF_FONT,
       color: "#000",
       boxShadow: shadow ? "0 20px 40px rgba(0,0,0,0.25)" : "none",
     }}
@@ -62,8 +208,8 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
     <div
       style={{
         position: "absolute",
-        top: 400,
-        right: 100,
+        top: 410,
+        right: 105,
         fontSize: 18,
         textDecoration: "underline",
       }}
@@ -75,11 +221,11 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
     <div
       style={{
         position: "absolute",
-        top: 440,
-        left: 100,
-        right: 100,
-        fontSize: 18,
-        lineHeight: "36px",
+        top: 480,
+        left: 105,
+        right: 105,
+        fontSize: 17,
+        lineHeight: "30px",
         textAlign: "justify",
         textIndent: 20,
       }}
@@ -88,9 +234,11 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
         This is to certify that the marriage (Nikah) between{" "}
         <strong>MR. {data.groomName.toUpperCase()}</strong>, S/O{" "}
         <strong>{data.groomFatherName.toUpperCase()}</strong>, residing at{" "}
-        <strong>{data.address.toUpperCase()}</strong>, and{" "}
+        <strong>{data.groomAddress.toUpperCase()}</strong>, and{" "}
         <strong>MISS {data.bridalName.toUpperCase()}</strong>, D/O{" "}
-        <strong>{data.bridalFatherName.toUpperCase()}</strong>, was solemnized on{" "}
+        <strong>{data.bridalFatherName.toUpperCase()}</strong>, residing at{" "}
+        <strong>{data.bridalAddress.toUpperCase()}</strong>, was solemnized by{" "}
+        <strong>{data.solemnizerName.toUpperCase()}</strong> on{" "}
         <strong>{formatDate(data.weddingDate)}</strong> at{" "}
         <strong>{data.weddingPlace.toUpperCase()}</strong> in accordance with
         Islamic Shariath and customs.
@@ -107,23 +255,25 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
 /* ================= MAIN PAGE ================= */
 export default function MarriageCertificatePage() {
   const router = useRouter();
-useEffect(() => {
-  const isLoggedIn = sessionStorage.getItem("loggedIn");
-  if (isLoggedIn !== "true") {
-    router.replace("/login");
-  }
-}, [router]);
+  useEffect(() => {
+    const isLoggedIn = sessionStorage.getItem("loggedIn");
+    if (isLoggedIn !== "true") {
+      router.replace("/login");
+    }
+  }, [router]);
 
-  const downloadRef = useRef<HTMLDivElement>(null);
+
 
   const [formData, setFormData] = useState<FormData>({
     groomName: "",
     groomFatherName: "",
+    groomAddress: "",
     bridalName: "",
     bridalFatherName: "",
+    bridalAddress: "",
     weddingDate: "",
     weddingPlace: "",
-    address: "",
+    solemnizerName: "",
   });
 
   const [errors, setErrors] = useState<Partial<FormData>>({});
@@ -137,7 +287,7 @@ useEffect(() => {
       const w = window.innerWidth - 64;
       setScale(Math.min(w / A4_WIDTH, 1));
     };
-    
+
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -166,30 +316,163 @@ useEffect(() => {
 
   /* ---------- PDF ---------- */
   const downloadPDF = useCallback(async () => {
-    if (!downloadRef.current) return;
     setLoading(true);
 
     try {
-      const canvas = await html2canvas(downloadRef.current, {
-        scale: 2,
-        width: A4_WIDTH,
-        height: A4_HEIGHT,
-        windowWidth: A4_WIDTH,
-        windowHeight: A4_HEIGHT,
-        backgroundColor: "#fff",
-        useCORS: true,
-        logging: false,
+      // 1. Fetch fonts
+      let timesNormalBase64 = "";
+      let timesBoldBase64 = "";
+      try {
+        const [normalRes, boldRes] = await Promise.all([
+          fetch("/fonts/times.ttf").then((r) => r.arrayBuffer()),
+          fetch("/fonts/timesbd.ttf").then((r) => r.arrayBuffer()),
+        ]);
+
+        const getBase64 = (arrayBuffer: ArrayBuffer): Promise<string> => {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              const base64Data = result.split(",")[1];
+              resolve(base64Data);
+            };
+            reader.readAsDataURL(new Blob([arrayBuffer]));
+          });
+        };
+
+        timesNormalBase64 = await getBase64(normalRes);
+        timesBoldBase64 = await getBase64(boldRes);
+      } catch (err) {
+        console.error("Failed to load custom fonts, falling back to standard fonts:", err);
+      }
+
+      // 2. Load background image (webp) and convert to PNG data URL for high-quality embedding
+      let bgDataUrl = "";
+      try {
+        bgDataUrl = await new Promise<string>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            // Standard A4 aspect ratio high DPI background
+            canvas.width = A4_WIDTH * 2;
+            canvas.height = A4_HEIGHT * 2;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/png"));
+            } else {
+              reject(new Error("Could not get 2d context"));
+            }
+          };
+          img.onerror = (err) => reject(err);
+          img.src = "/template.webp";
+        });
+      } catch (err) {
+        console.error("Failed to load background template.webp, falling back to template.png:", err);
+        try {
+          bgDataUrl = await new Promise<string>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = A4_WIDTH * 2;
+              canvas.height = A4_HEIGHT * 2;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL("image/png"));
+              } else {
+                reject(new Error("Could not get 2d context"));
+              }
+            };
+            img.onerror = (err) => reject(err);
+            img.src = "/template.png";
+          });
+        } catch (fallbackErr) {
+          console.error("Failed to load fallback template.png:", fallbackErr);
+        }
+      }
+
+      // 3. Initialize jsPDF
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "a4",
       });
 
-      const pdf = new jsPDF("portrait", "mm", "a4");
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297);
+      // 4. Register custom fonts if available
+      const fontName = timesNormalBase64 && timesBoldBase64 ? "CustomTimesRoman" : "times";
+      if (timesNormalBase64 && timesBoldBase64) {
+        pdf.addFileToVFS("times.ttf", timesNormalBase64);
+        pdf.addFont("times.ttf", fontName, "normal");
+        pdf.addFileToVFS("timesbd.ttf", timesBoldBase64);
+        pdf.addFont("timesbd.ttf", fontName, "bold");
+      }
+
+      // 5. Add background image
+      if (bgDataUrl) {
+        pdf.addImage(bgDataUrl, "PNG", 0, 0, 595.28, 841.89);
+      }
+
+      // 6. Draw Date
+      // 1px = 0.75pt (794px width -> 595.28pt, 1123px height -> 841.89pt)
+      const dateText = `Date: ${formatDate(new Date().toISOString())}`;
+      pdf.setFont(fontName, "normal");
+      pdf.setFontSize(13.5); // 18px * 0.75 = 13.5pt
+      const rightMargin = 520.5; // (794px - 100px) * 0.75 = 520.5pt
+      const dateTextWidth = pdf.getTextWidth(dateText);
+      const dateX = rightMargin - dateTextWidth;
+      const dateY = 330; // (400px + 18px) * 0.75 = 313.5pt
+      pdf.text(dateText, dateX, dateY);
+      pdf.line(dateX, dateY + 2, rightMargin, dateY + 2); // Underline
+
+      // 7. Draw Content paragraphs
+      const p1Text = `This is to certify that the marriage (Nikah) between **MR. ${formData.groomName.toUpperCase()}**, S/O **${formData.groomFatherName.toUpperCase()}**, residing at **${formData.groomAddress.toUpperCase()}**, and **MISS ${formData.bridalName.toUpperCase()}**, D/O **${formData.bridalFatherName.toUpperCase()}**, residing at **${formData.bridalAddress.toUpperCase()}**, was solemnized by **${formData.solemnizerName.toUpperCase()}** on **${formatDate(formData.weddingDate)}** at **${formData.weddingPlace.toUpperCase()}** in accordance with Islamic Shariath and customs.`;
+
+      const p2Text = `This marriage (Nikah) has been duly registered in the official Marriage Register maintained by the Committee.`;
+
+      const startX = 75; // 100px * 0.75 = 75pt
+      const startY = 380; // 465px * 0.75 = 348.75pt
+      const maxWidth = 445.5; // 594px * 0.75 = 445.5pt
+      const lineHeight = 22; // 36px * 0.75 = 27pt
+      const fontSize = 13; // 18px * 0.75 = 13.5pt
+      const indent = 20; // 20px * 0.75 = 15pt
+      const paragraphGap = 24; // 32px * 0.75 = 24pt
+
+      const nextY = drawParagraph(
+        pdf,
+        p1Text,
+        startX,
+        startY,
+        maxWidth,
+        lineHeight,
+        fontSize,
+        fontName,
+        "justify",
+        indent
+      );
+
+      drawParagraph(
+        pdf,
+        p2Text,
+        startX,
+        nextY + paragraphGap,
+        maxWidth,
+        lineHeight,
+        fontSize,
+        fontName,
+        "justify",
+        0
+      );
+
       pdf.save("Nikah-Marriage-Certificate.pdf");
     } catch (error) {
       console.error("PDF generation failed:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [formData]);
 
   /* ================= UI ================= */
   return (
@@ -219,7 +502,42 @@ useEffect(() => {
               </div>
             ))}
 
-            <div>
+       
+
+
+
+            <div className="md:col-span-1">
+              <label className="block text-sm font-semibold mb-1">
+                Groom Address
+              </label>
+              <textarea
+                name="groomAddress"
+                rows={3}
+                value={formData.groomAddress}
+                onChange={handleChange}
+                className="w-full rounded-lg border px-4 py-2 focus:ring-2 focus:ring-black"
+              />
+              {errors["groomAddress"] && (
+                <p className="text-xs text-red-500 mt-1">Required</p>
+              )}
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="block text-sm font-semibold mb-1">
+                Bride Address
+              </label>
+              <textarea
+                name="bridalAddress"
+                rows={3}
+                value={formData.bridalAddress}
+                onChange={handleChange}
+                className="w-full rounded-lg border px-4 py-2 focus:ring-2 focus:ring-black"
+              />
+              {errors["bridalAddress"] && (
+                <p className="text-xs text-red-500 mt-1">Required</p>
+              )}
+            </div>
+                 <div>
               <label className="block text-sm font-semibold mb-1">
                 Wedding Date
               </label>
@@ -230,25 +548,9 @@ useEffect(() => {
                 onChange={handleChange}
                 className="w-full rounded-lg border px-4 py-2"
               />
-               {errors['weddingDate'] && (
-                  <p className="text-xs text-red-500 mt-1">Required</p>
-                )}
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold mb-1">
-                Address
-              </label>
-              <textarea
-                name="address"
-                rows={3}
-                value={formData.address}
-                onChange={handleChange}
-                className="w-full rounded-lg border px-4 py-2"
-              />
-               {errors["address"] && (
-                  <p className="text-xs text-red-500 mt-1">Required</p>
-                )}
+              {errors['weddingDate'] && (
+                <p className="text-xs text-red-500 mt-1">Required</p>
+              )}
             </div>
 
             <button
@@ -292,13 +594,6 @@ useEffect(() => {
           </>
         )}
 
-        {/* HIDDEN DOWNLOAD */}
-        <div
-          ref={downloadRef}
-          style={{ position: "absolute", top: "-9999px", left: "-9999px" }}
-        >
-          <Certificate data={formData} forPdf />
-        </div>
       </div>
     </div>
   );
