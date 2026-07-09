@@ -252,6 +252,35 @@ const Certificate = ({ data, shadow, forPdf }: CertificateProps) => (
   </div>
 );
 
+/* ================= LOADER OVERLAY ================= */
+type LoadingOverlayProps = {
+  isOpen: boolean;
+  title: string;
+  subtitle: string;
+};
+
+const LoadingOverlay = ({ isOpen, title, subtitle }: LoadingOverlayProps) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md transition-all duration-300">
+      <div className="bg-white/95 border border-gray-100 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 text-center">
+        {/* Animated outer ring and inner spinner */}
+        <div className="relative w-20 h-20 mb-6">
+          <div className="absolute inset-0 rounded-full border-4 border-gray-100"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-black border-t-transparent animate-spin"></div>
+          <div className="absolute -inset-2 rounded-full bg-black/5 animate-ping"></div>
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 tracking-tight">
+          {title}
+        </h3>
+        <p className="text-sm text-gray-500 mt-2 font-medium">
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 /* ================= MAIN PAGE ================= */
 export default function MarriageCertificatePage() {
   const router = useRouter();
@@ -261,8 +290,6 @@ export default function MarriageCertificatePage() {
       router.replace("/login");
     }
   }, [router]);
-
-
 
   const [formData, setFormData] = useState<FormData>({
     groomName: "",
@@ -280,6 +307,8 @@ export default function MarriageCertificatePage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [scale, setScale] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState("");
 
   /* ---------- PREVIEW SCALE ---------- */
   useEffect(() => {
@@ -314,11 +343,43 @@ export default function MarriageCertificatePage() {
     return !Object.keys(newErrors).length;
   }, [formData]);
 
+  const handlePreview = useCallback(async () => {
+    if (!validate()) return;
+    setIsPreviewLoading(true);
+
+    try {
+      // Preload template image
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => {
+          const fallbackImg = new Image();
+          fallbackImg.onload = () => resolve();
+          fallbackImg.onerror = () => resolve();
+          fallbackImg.src = "/template.webp";
+        };
+        img.src = "/template.svg";
+      });
+
+      // Artificial delay for premium look & feel
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setPreviewOpen(true);
+    } catch (err) {
+      console.error("Preview load error:", err);
+      setPreviewOpen(true);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, [validate]);
+
   /* ---------- PDF ---------- */
   const downloadPDF = useCallback(async () => {
     setLoading(true);
+    setDownloadStatus("Initializing PDF engine...");
+    await new Promise((r) => setTimeout(r, 450));
 
     try {
+      setDownloadStatus("Loading custom fonts...");
       // 1. Fetch fonts
       let timesNormalBase64 = "";
       let timesBoldBase64 = "";
@@ -345,6 +406,9 @@ export default function MarriageCertificatePage() {
       } catch (err) {
         console.error("Failed to load custom fonts, falling back to standard fonts:", err);
       }
+
+      setDownloadStatus("Importing background template...");
+      await new Promise((r) => setTimeout(r, 450));
 
       // 2. Load background image (webp) and convert to PNG data URL for high-quality embedding
       let bgDataUrl = "";
@@ -393,6 +457,9 @@ export default function MarriageCertificatePage() {
           console.error("Failed to load fallback template.png:", fallbackErr);
         }
       }
+
+      setDownloadStatus("Rendering vector content...");
+      await new Promise((r) => setTimeout(r, 450));
 
       // 3. Initialize jsPDF
       const pdf = new jsPDF({
@@ -466,17 +533,26 @@ export default function MarriageCertificatePage() {
         0
       );
 
+      setDownloadStatus("Saving PDF file...");
+      await new Promise((r) => setTimeout(r, 300));
+
       pdf.save("Nikah-Marriage-Certificate.pdf");
     } catch (error) {
       console.error("PDF generation failed:", error);
     } finally {
       setLoading(false);
+      setDownloadStatus("");
     }
   }, [formData]);
 
   /* ================= UI ================= */
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 py-12 px-4">
+      <LoadingOverlay
+        isOpen={isPreviewLoading || loading}
+        title={isPreviewLoading ? "Generating Preview" : "Downloading Certificate"}
+        subtitle={isPreviewLoading ? "Preloading template assets..." : downloadStatus}
+      />
       <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-2xl p-10">
         <h1 className="text-3xl font-bold text-center mb-10">
           Nikah Marriage Certificate
@@ -502,7 +578,7 @@ export default function MarriageCertificatePage() {
               </div>
             ))}
 
-       
+
 
 
 
@@ -537,7 +613,7 @@ export default function MarriageCertificatePage() {
                 <p className="text-xs text-red-500 mt-1">Required</p>
               )}
             </div>
-                 <div>
+            <div>
               <label className="block text-sm font-semibold mb-1">
                 Wedding Date
               </label>
@@ -554,7 +630,7 @@ export default function MarriageCertificatePage() {
             </div>
 
             <button
-              onClick={() => validate() && setPreviewOpen(true)}
+              onClick={handlePreview}
               className="md:col-span-2 bg-black text-white py-4 rounded-xl text-lg font-semibold hover:bg-gray-800 transition"
             >
               Preview Certificate
