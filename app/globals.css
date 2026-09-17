@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* Custom Times New Roman font for PDF */
@@ -12,6 +13,40 @@
   font-family: "CustomTimesRoman";
   src: url("/fonts/timesbd.ttf") format("truetype");
   font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Elgraine font for certificate names */
+@font-face {
+  font-family: "Elgraine";
+  src: url("/fonts/Elgraine-Regular.ttf") format("truetype"),
+       url("/fonts/Elgraine-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Elgraine";
+  src: url("/fonts/Elgraine-Medium.ttf") format("truetype"),
+       url("/fonts/Elgraine-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Elgraine";
+  src: url("/fonts/Elgraine-SemiBold.ttf") format("truetype"),
+       url("/fonts/Elgraine-SemiBold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Elgraine";
+  src: url("/fonts/Elgraine-Bold.ttf") format("truetype"),
+       url("/fonts/Elgraine-Bold.otf") format("opentype");
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
