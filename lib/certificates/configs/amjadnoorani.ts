@@ -36,7 +36,7 @@ export const amjadNooraniCertificateConfig: CertificateConfig = {
       id: "batchName",
       label: "Batch Name / Number",
       type: "text",
-      placeholder: "e.g. BATCH-01",
+      placeholder: "e.g. 01",
       required: true,
       gridSpan: 1,
     },
@@ -50,8 +50,8 @@ export const amjadNooraniCertificateConfig: CertificateConfig = {
   ],
   sampleData: {
     studentName: "MUHAMMED SHAFEEQUE",
-    batchName: "BATCH-01",
-    completionDate: "2025-01-02",
+    batchName: "01",
+    completionDate: "2026-06-02",
   },
   template: {
     backgroundUrl: "/inkject.webp",
@@ -113,15 +113,15 @@ export const amjadNooraniCertificateConfig: CertificateConfig = {
 
     renderParagraphs: (data) => {
       const student = (data.studentName || "").toUpperCase();
-      const rawBatch = (data.batchName || "BATCH-01").toUpperCase().trim();
-      const batchFormatted = rawBatch ? (rawBatch.startsWith("(") ? rawBatch : `(${rawBatch})`) : "";
+      const rawBatch = (data.batchName || "01").toUpperCase().trim();
 
       return {
         p1: "",
         p2: undefined,
         p3: undefined,
         studentName: student,
-        courseSubtitle: `For successfully completing\n10 Day’s Online Basic Creative Writng course ${batchFormatted}`,
+        courseSubtitle: `For successfully completing the
+10-Day Online Basic Creative Writing Course (BATCH-${rawBatch})`,
       };
     },
   },

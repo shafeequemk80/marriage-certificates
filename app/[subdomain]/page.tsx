@@ -37,7 +37,7 @@ export default function SubdomainLandingPage({ params }: PageProps) {
             </div>
             <div>
               <span className="font-extrabold text-xl bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent tracking-tight">
-                {config.name}
+                {config.shortName}
               </span>
               <span className="block text-[10px] uppercase font-bold tracking-widest text-slate-500">
                 {config.theme.category}
@@ -50,7 +50,7 @@ export default function SubdomainLandingPage({ params }: PageProps) {
               href={`/${config.id}/login`}
               className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-semibold bg-white text-slate-950 hover:bg-slate-200 shadow-md shadow-white/5 transition"
             >
-              Login to Portal
+              Login
             </Link>
           </div>
         </div>
